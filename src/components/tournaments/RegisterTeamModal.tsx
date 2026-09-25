@@ -1,13 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Modal } from "@/components/shared/Modal";
 import { Spinner } from "@/components/shared/Spinner";
 import { useToast } from "@/components/shared/ToastProvider";
-import { ApiClientError } from "@/lib/apiClient";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useRegisterTournament } from "@/hooks/useTournaments";
-import { useAuthStore } from "@/store/useAuthStore";
+import { ApiClientError } from "@/lib/apiClient";
+import { formatShortDate } from "@/lib/utils";
 import type { Tournament } from "@/types";
 
 interface RegisterTeamModalProps {
@@ -17,24 +19,16 @@ interface RegisterTeamModalProps {
 }
 
 export function RegisterTeamModal({ tournament, open, onClose }: RegisterTeamModalProps) {
-  const router = useRouter();
   const { showToast } = useToast();
-  const user = useAuthStore((state) => state.user);
   const registerTournament = useRegisterTournament();
   const [teamName, setTeamName] = useState("");
+  const spotsLeft = tournament.maxTeams - tournament.registeredTeams;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (!user) {
-      showToast("Please log in to register a team", "error");
-      router.push("/login");
-      return;
-    }
-
     try {
-      await registerTournament.mutateAsync({ tournamentId: tournament.id, teamName });
-      showToast(`${teamName} is registered for ${tournament.title}!`, "success");
+      await registerTournament.mutateAsync({ tournamentId: tournament.id, teamName: teamName.trim() });
+      showToast(`${teamName.trim()} is in! See you on ${formatShortDate(tournament.startDate)}.`, "success");
       setTeamName("");
       onClose();
     } catch (err) {
@@ -43,32 +37,44 @@ export function RegisterTeamModal({ tournament, open, onClose }: RegisterTeamMod
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Register for ${tournament.title}`}>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="mb-1 block text-xs text-text-primary/60">Team name</label>
-          <input
-            required
-            minLength={2}
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            placeholder="e.g. Koramangala Strikers"
-            className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-emerald"
-          />
-        </div>
-        <div className="flex justify-between text-xs text-text-primary/60">
-          <span>Entry fee</span>
-          <span className="text-amber">₹{tournament.entryFee}</span>
-        </div>
-        <button
-          type="submit"
-          disabled={registerTournament.isPending}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald px-4 py-2.5 text-sm font-medium text-background disabled:opacity-60"
-        >
-          {registerTournament.isPending && <Spinner />}
-          Confirm Registration
-        </button>
-      </form>
-    </Modal>
+    <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Register your team</DialogTitle>
+          <DialogDescription>
+            {tournament.title} · {spotsLeft} {spotsLeft === 1 ? "spot" : "spots"} left
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <Label htmlFor="team-name">Team name</Label>
+            <Input
+              id="team-name"
+              required
+              minLength={2}
+              maxLength={60}
+              autoFocus
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              placeholder="e.g. Koramangala Strikers"
+            />
+          </div>
+          <div className="space-y-2 rounded-2xl bg-background p-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-text-primary/60">Entry fee</span>
+              <span className="font-bold">₹{tournament.entryFee}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-primary/60">Kick-off</span>
+              <span className="font-semibold">{formatShortDate(tournament.startDate)}</span>
+            </div>
+          </div>
+          <Button type="submit" size="lg" className="w-full" disabled={registerTournament.isPending || teamName.trim().length < 2}>
+            {registerTournament.isPending && <Spinner />}
+            Confirm registration
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

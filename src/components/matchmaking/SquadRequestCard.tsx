@@ -1,87 +1,105 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/shared/Badge";
-import { ProgressBar } from "@/components/shared/ProgressBar";
-import { CalendarIcon, CheckIcon, StarIcon } from "@/components/shared/icons";
+import { Avatar } from "@/components/shared/Avatar";
+import { CalendarIcon, CheckIcon, ClockIcon, LocationPinIcon, SportIcon, StarIcon } from "@/components/shared/icons";
+import { Spinner } from "@/components/shared/Spinner";
 import { useToast } from "@/components/shared/ToastProvider";
-import { ApiClientError } from "@/lib/apiClient";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useJoinSquad } from "@/hooks/useMatchmaking";
+import { ApiClientError } from "@/lib/apiClient";
+import { cn, formatShortDate } from "@/lib/utils";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { SquadRequest } from "@/types";
 
-interface SquadRequestCardProps {
-  squad: SquadRequest;
+function trustVariant(score: number) {
+  return score >= 4.5 ? "emerald" : score >= 4 ? "outline" : "danger";
 }
 
-export function SquadRequestCard({ squad }: SquadRequestCardProps) {
+export function SquadRequestCard({ squad }: { squad: SquadRequest }) {
   const { showToast } = useToast();
-  const user = useAuthStore((state) => state.user);
+  const userId = useAuthStore((state) => state.user?.id);
   const joinSquad = useJoinSquad();
   const [requestSent, setRequestSent] = useState(false);
 
   const isFull = squad.slotsFilled >= squad.slotsTotal;
-  const isOwnSquad = user?.id === squad.captainId;
+  const isOwnSquad = userId === squad.captainId;
+  const openSlots = squad.slotsTotal - squad.slotsFilled;
 
   async function handleRequestToJoin() {
-    if (!user) {
-      showToast("Please log in to request to join a squad", "error");
-      return;
-    }
     try {
       await joinSquad.mutateAsync(squad.id);
       setRequestSent(true);
-      showToast(`Request sent to ${squad.captainName}!`, "success");
+      showToast(`Request sent to ${squad.captainName.split(" ")[0]}'s squad`, "success");
     } catch (err) {
       showToast(err instanceof ApiClientError ? err.message : "Could not send join request.", "error");
     }
   }
 
+  const label = isOwnSquad ? "Your squad" : requestSent ? "Request Sent" : isFull ? "Squad full" : "Request to Join";
+
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
-      <div className="flex items-start justify-between">
+    <article className="flex flex-col rounded-2xl border border-border bg-card transition-colors hover:border-emerald/50">
+      <div className="flex items-center gap-3 p-4">
+        <Avatar name={squad.captainName} className="h-11 w-11 text-sm" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-primary/40">Captain</p>
+          <p className="truncate font-bold">{squad.captainName}</p>
+        </div>
+        <Badge variant={trustVariant(squad.captainTrustScore)} title="Captain Trust Score">
+          <StarIcon className="h-3 w-3" />
+          {squad.captainTrustScore.toFixed(1)}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-y border-border px-4 py-3 text-xs text-text-primary/70">
+        <span className="flex items-center gap-1.5 font-semibold text-text-primary">
+          <SportIcon sport={squad.sportType} className="h-3.5 w-3.5 text-emerald" /> {squad.sportType}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <LocationPinIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{squad.venueName ?? "TBD"}</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <CalendarIcon className="h-3.5 w-3.5" /> {formatShortDate(squad.slotDate)}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <ClockIcon className="h-3.5 w-3.5" /> {squad.slotStart.slice(0, 5)}
+        </span>
+      </div>
+
+      <div className="flex items-end justify-between gap-3 p-4">
         <div>
-          <h3 className="text-sm font-semibold text-text-primary">{squad.captainName}</h3>
-          <p className="text-xs text-text-primary/60">
-            {squad.sportType}
-            {squad.venueName ? ` · ${squad.venueName}` : ""}
+          <p className="text-2xl font-extrabold text-emerald tabular-nums">₹{squad.perHeadCost}</p>
+          <p className="text-[11px] text-text-primary/50">per head · ₹{squad.totalCost} total</p>
+        </div>
+        <div className="text-right">
+          <div className="flex justify-end gap-1" aria-label={`${squad.slotsFilled} of ${squad.slotsTotal} slots filled`}>
+            {Array.from({ length: squad.slotsTotal }, (_, i) => (
+              <span
+                key={i}
+                className={cn("h-3 w-3 rounded-full", i < squad.slotsFilled ? "bg-emerald" : "border border-border bg-background")}
+              />
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-text-primary/50">
+            {squad.slotsFilled}/{squad.slotsTotal} filled{!isFull && ` · ${openSlots} open`}
           </p>
         </div>
-        <Badge variant="amber">
-          <StarIcon className="h-3 w-3" />
-          {squad.captainTrustScore.toFixed(1)} Trust
-        </Badge>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        <Badge>
-          <CalendarIcon className="h-3 w-3" />
-          {new Date(squad.slotDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} · {squad.slotStart}
-        </Badge>
-        <Badge>Total ₹{squad.totalCost}</Badge>
-        <Badge variant="emerald">₹{squad.perHeadCost}/head</Badge>
+      <div className="mt-auto px-4 pb-4">
+        <Button
+          className="w-full"
+          variant={requestSent ? "outline" : "default"}
+          onClick={handleRequestToJoin}
+          disabled={requestSent || isFull || isOwnSquad || joinSquad.isPending}
+        >
+          {joinSquad.isPending ? <Spinner /> : requestSent && <CheckIcon className="h-4 w-4" />}
+          {label}
+        </Button>
       </div>
-
-      <ProgressBar value={squad.slotsFilled} max={squad.slotsTotal} label="Slots filled" />
-
-      <button
-        onClick={handleRequestToJoin}
-        disabled={requestSent || isFull || isOwnSquad || joinSquad.isPending}
-        className={`flex items-center justify-center gap-1.5 rounded-2xl px-4 py-2 text-xs font-medium transition-transform active:scale-95 disabled:cursor-not-allowed ${
-          requestSent
-            ? "border border-emerald text-emerald"
-            : "bg-emerald text-background disabled:opacity-50"
-        }`}
-      >
-        {requestSent && <CheckIcon className="h-3.5 w-3.5" />}
-        {isOwnSquad
-          ? "Your Squad"
-          : isFull && !requestSent
-            ? "Squad Full"
-            : requestSent
-              ? "Request Sent"
-              : "Request to Join"}
-      </button>
-    </div>
+    </article>
   );
 }

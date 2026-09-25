@@ -1,26 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { Modal } from "@/components/shared/Modal";
+import { SportIcon } from "@/components/shared/icons";
 import { Spinner } from "@/components/shared/Spinner";
 import { useToast } from "@/components/shared/ToastProvider";
-import { ApiClientError } from "@/lib/apiClient";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { usePostMatchmaking } from "@/hooks/useMatchmaking";
-import { useAuthStore } from "@/store/useAuthStore";
+import { ApiClientError } from "@/lib/apiClient";
+import { cn } from "@/lib/utils";
 import { SPORTS } from "@/types";
 
 interface PostAvailabilityModalProps {
   open: boolean;
   onClose: () => void;
+  onPosted: () => void;
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }
 
-export function PostAvailabilityModal({ open, onClose }: PostAvailabilityModalProps) {
+export function PostAvailabilityModal({ open, onClose, onPosted }: PostAvailabilityModalProps) {
   const { showToast } = useToast();
-  const user = useAuthStore((state) => state.user);
   const postMatchmaking = usePostMatchmaking();
 
   const [sportType, setSportType] = useState<string>(SPORTS[0]);
@@ -31,12 +36,6 @@ export function PostAvailabilityModal({ open, onClose }: PostAvailabilityModalPr
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (!user) {
-      showToast("Please log in to post your availability", "error");
-      return;
-    }
-
     try {
       await postMatchmaking.mutateAsync({
         kind: "solo",
@@ -44,83 +43,68 @@ export function PostAvailabilityModal({ open, onClose }: PostAvailabilityModalPr
         availableDate,
         availableTime,
         maxBudget: maxBudget ? Number(maxBudget) : undefined,
-        notes: notes || undefined,
+        notes: notes.trim() || undefined,
       });
-      showToast("Your availability is live in the Solo Players Hub!", "success");
+      showToast("You're live in the Solo Players hub", "success");
       setNotes("");
-      onClose();
+      onPosted();
     } catch (err) {
       showToast(err instanceof ApiClientError ? err.message : "Could not post your availability.", "error");
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Post Your Availability">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="mb-1 block text-xs text-text-primary/60">Sport</label>
-          <select
-            value={sportType}
-            onChange={(e) => setSportType(e.target.value)}
-            className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-emerald"
-          >
-            {SPORTS.map((sport) => (
-              <option key={sport} value={sport}>
-                {sport}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+    <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Post your availability</DialogTitle>
+          <DialogDescription>Captains nearby get it instantly over Socket.IO.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="mb-1 block text-xs text-text-primary/60">Date</label>
-            <input
-              type="date"
-              min={todayIso()}
-              value={availableDate}
-              onChange={(e) => setAvailableDate(e.target.value)}
-              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-emerald"
-            />
+            <Label>Sport</Label>
+            <div className="grid grid-cols-5 gap-2">
+              {SPORTS.map((sport) => (
+                <button
+                  key={sport}
+                  type="button"
+                  onClick={() => setSportType(sport)}
+                  aria-pressed={sportType === sport}
+                  className={cn(
+                    "flex flex-col items-center gap-1.5 rounded-2xl border py-3 text-[10px] font-semibold transition-colors",
+                    sportType === sport ? "border-emerald bg-emerald/10 text-emerald" : "border-border text-text-primary/60"
+                  )}
+                >
+                  <SportIcon sport={sport} className="h-5 w-5" />
+                  {sport}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="avail-date">Date</Label>
+              <Input id="avail-date" type="date" required min={todayIso()} value={availableDate} onChange={(e) => setAvailableDate(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="avail-time">Time</Label>
+              <Input id="avail-time" type="time" required value={availableTime} onChange={(e) => setAvailableTime(e.target.value)} />
+            </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-text-primary/60">Time</label>
-            <input
-              type="time"
-              value={availableTime}
-              onChange={(e) => setAvailableTime(e.target.value)}
-              className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-emerald"
-            />
+            <Label htmlFor="avail-budget">Max budget per game (₹)</Label>
+            <Input id="avail-budget" type="number" min={0} inputMode="numeric" value={maxBudget} onChange={(e) => setMaxBudget(e.target.value)} />
           </div>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-text-primary/60">Max budget (₹)</label>
-          <input
-            type="number"
-            min={0}
-            value={maxBudget}
-            onChange={(e) => setMaxBudget(e.target.value)}
-            className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-emerald"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-text-primary/60">Notes (optional)</label>
-          <input
-            maxLength={280}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g. Striker, weekday evenings"
-            className="w-full rounded-2xl border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-emerald"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={postMatchmaking.isPending}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald px-4 py-2.5 text-sm font-medium text-background disabled:opacity-60"
-        >
-          {postMatchmaking.isPending && <Spinner />}
-          Post Now
-        </button>
-      </form>
-    </Modal>
+          <div>
+            <Label htmlFor="avail-notes">Notes (optional)</Label>
+            <Input id="avail-notes" maxLength={280} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Striker, weekday evenings" />
+          </div>
+          <Button type="submit" size="lg" className="w-full" disabled={postMatchmaking.isPending}>
+            {postMatchmaking.isPending && <Spinner />}
+            Post Now
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

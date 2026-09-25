@@ -2,151 +2,206 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { ErrorState } from "@/components/shared/ErrorState";
-import { Spinner } from "@/components/shared/Spinner";
 import { AthleteResumeDrawer } from "@/components/matchmaking/AthleteResumeDrawer";
 import { PickupMatchesTab } from "@/components/matchmaking/PickupMatchesTab";
 import { PostAvailabilityModal } from "@/components/matchmaking/PostAvailabilityModal";
 import { SoloPlayerCard } from "@/components/matchmaking/SoloPlayerCard";
 import { SquadRequestCard } from "@/components/matchmaking/SquadRequestCard";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { ErrorState } from "@/components/shared/ErrorState";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { CloseIcon, PlusIcon, SportIcon, UserIcon, UsersIcon } from "@/components/shared/icons";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMatchmakingSocket, useSolo, useSquads } from "@/hooks/useMatchmaking";
+import { useSocketStatus } from "@/hooks/useSocketStatus";
+import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/useUiStore";
-import type { SoloAvailability } from "@/types";
+import { SPORTS, type SoloAvailability } from "@/types";
 
 type SubTab = "squads" | "solo" | "pickup";
-
-const TABS: { key: SubTab; label: string }[] = [
-  { key: "squads", label: "Squad Requests" },
-  { key: "solo", label: "Solo Players Hub" },
-  { key: "pickup", label: "Open Pickup Matches" },
-];
+const SUB_TABS: SubTab[] = ["squads", "solo", "pickup"];
 
 export default function MatchmakingPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center py-16"><Spinner /></div>}>
+    <Suspense fallback={<div className="mx-auto max-w-7xl p-4"><Skeleton className="h-96" /></div>}>
       <MatchmakingPageInner />
     </Suspense>
   );
 }
 
+function LiveIndicator() {
+  const connected = useSocketStatus();
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold",
+        connected ? "border-emerald/40 text-emerald" : "border-border text-text-primary/50"
+      )}
+    >
+      <span className="relative flex h-2 w-2">
+        {connected && <span className="absolute inline-flex h-full w-full rounded-full bg-emerald animate-live-ping" />}
+        <span className={cn("relative inline-flex h-2 w-2 rounded-full", connected ? "bg-emerald" : "bg-text-primary/30")} />
+      </span>
+      {connected ? "Live updates on" : "Reconnecting…"}
+    </span>
+  );
+}
+
+function GridSkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: 6 }, (_, i) => (
+        <Skeleton key={i} className="h-64" />
+      ))}
+    </div>
+  );
+}
+
 function MatchmakingPageInner() {
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get("tab") as SubTab | null) ?? "squads";
-  const sportFilterParam = searchParams.get("sport");
+  const tabParam = searchParams.get("tab") as SubTab | null;
+  const sportParam = searchParams.get("sport");
 
-  const setMatchmakingSportFilter = useUiStore((state) => state.setMatchmakingSportFilter);
-  const matchmakingSportFilter = useUiStore((state) => state.matchmakingSportFilter);
+  const sportFilter = useUiStore((state) => state.matchmakingSportFilter);
+  const setSportFilter = useUiStore((state) => state.setMatchmakingSportFilter);
 
-  const [activeTab, setActiveTab] = useState<SubTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<SubTab>(tabParam && SUB_TABS.includes(tabParam) ? tabParam : "squads");
   const [selectedAthlete, setSelectedAthlete] = useState<SoloAvailability | null>(null);
   const [postOpen, setPostOpen] = useState(false);
 
   useMatchmakingSocket();
 
+  // "Find Missing Players" deep-links here with ?sport=, pre-setting the filter.
   useEffect(() => {
-    if (sportFilterParam) {
-      setMatchmakingSportFilter(sportFilterParam);
-    }
-  }, [sportFilterParam, setMatchmakingSportFilter]);
+    if (sportParam) setSportFilter(sportParam);
+  }, [sportParam, setSportFilter]);
 
   const squads = useSquads();
   const solo = useSolo();
 
-  const filteredSquads = useMemo(() => {
-    if (!squads.data) return [];
-    if (!matchmakingSportFilter) return squads.data.squads;
-    return squads.data.squads.filter((s) => s.sportType === matchmakingSportFilter);
-  }, [squads.data, matchmakingSportFilter]);
-
-  const filteredSolo = useMemo(() => {
-    if (!solo.data) return [];
-    if (!matchmakingSportFilter) return solo.data.solo;
-    return solo.data.solo.filter((s) => s.sportType === matchmakingSportFilter);
-  }, [solo.data, matchmakingSportFilter]);
+  const filteredSquads = useMemo(
+    () => (squads.data?.squads ?? []).filter((s) => !sportFilter || s.sportType === sportFilter),
+    [squads.data, sportFilter]
+  );
+  const filteredSolo = useMemo(
+    () => (solo.data?.solo ?? []).filter((s) => !sportFilter || s.sportType === sportFilter),
+    [solo.data, sportFilter]
+  );
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-text-primary">Live Matchmaking</h1>
-        <button
-          onClick={() => setPostOpen(true)}
-          className="rounded-2xl bg-emerald px-4 py-2 text-xs font-medium text-background transition-transform active:scale-95"
-        >
-          + Post Availability
-        </button>
-      </div>
+    <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+      <PageHeader
+        eyebrow="Two-way matchmaking"
+        title="Fill your squad in minutes"
+        description="Captains post open slots, solo players post when they're free — both sides update live."
+        actions={
+          <>
+            <LiveIndicator />
+            <Button onClick={() => setPostOpen(true)}>
+              <PlusIcon /> Post Availability
+            </Button>
+          </>
+        }
+      />
 
-      {matchmakingSportFilter && (
-        <div className="flex items-center gap-2 rounded-2xl border border-emerald bg-emerald/10 px-4 py-2 text-xs text-emerald">
-          Filtering by {matchmakingSportFilter}
-          <button onClick={() => setMatchmakingSportFilter(null)} className="underline">
-            Clear
-          </button>
-        </div>
-      )}
-
-      <div className="flex gap-1 border-b border-border">
-        {TABS.map((tab) => (
+      <div className="scrollbar-none -mx-4 flex items-center gap-2 overflow-x-auto px-4">
+        {sportFilter && (
           <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-              activeTab === tab.key
-                ? "border-emerald text-emerald"
-                : "border-transparent text-text-primary/60 hover:text-text-primary"
-            }`}
+            onClick={() => setSportFilter(null)}
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald px-3 py-2 text-xs font-bold text-background"
           >
-            {tab.label}
+            {sportFilter} <CloseIcon className="h-3 w-3" />
+          </button>
+        )}
+        {SPORTS.filter((s) => s !== sportFilter).map((sport) => (
+          <button
+            key={sport}
+            onClick={() => setSportFilter(sport)}
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-semibold text-text-primary/70 transition-colors hover:border-emerald/50"
+          >
+            <SportIcon sport={sport} className="h-3.5 w-3.5" /> {sport}
           </button>
         ))}
       </div>
 
-      {activeTab === "squads" && (
-        <div className="space-y-4">
-          {squads.isLoading && (
-            <div className="flex justify-center py-16">
-              <Spinner />
-            </div>
-          )}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SubTab)}>
+        <div className="scrollbar-none -mx-4 overflow-x-auto px-4">
+          <TabsList>
+            <TabsTrigger value="squads">
+              <UsersIcon className="h-4 w-4" /> Squad Requests
+              <Count value={filteredSquads.length} />
+            </TabsTrigger>
+            <TabsTrigger value="solo">
+              <UserIcon className="h-4 w-4" /> Solo Players
+              <Count value={filteredSolo.length} />
+            </TabsTrigger>
+            <TabsTrigger value="pickup">Open Pickup Matches</TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="squads">
+          {squads.isLoading && <GridSkeleton />}
           {squads.isError && <ErrorState message="Could not load squad requests." onRetry={() => squads.refetch()} />}
           {!squads.isLoading && !squads.isError && filteredSquads.length === 0 && (
-            <p className="py-16 text-center text-sm text-text-primary/60">No open squad requests right now.</p>
+            <EmptyState icon={<UsersIcon className="h-6 w-6" />} title="No open squad requests" hint="Try another sport or check back soon." />
           )}
-          {!squads.isLoading && !squads.isError && filteredSquads.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredSquads.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {filteredSquads.map((squad) => (
                 <SquadRequestCard key={squad.id} squad={squad} />
               ))}
             </div>
           )}
-        </div>
-      )}
+        </TabsContent>
 
-      {activeTab === "solo" && (
-        <div className="space-y-4">
-          {solo.isLoading && (
-            <div className="flex justify-center py-16">
-              <Spinner />
-            </div>
-          )}
+        <TabsContent value="solo">
+          {solo.isLoading && <GridSkeleton />}
           {solo.isError && <ErrorState message="Could not load solo players." onRetry={() => solo.refetch()} />}
           {!solo.isLoading && !solo.isError && filteredSolo.length === 0 && (
-            <p className="py-16 text-center text-sm text-text-primary/60">No solo players are looking to play right now.</p>
+            <EmptyState
+              icon={<UserIcon className="h-6 w-6" />}
+              title="Nobody's posted for this sport yet"
+              action={
+                <Button size="sm" variant="outline" onClick={() => setPostOpen(true)}>
+                  Post your availability
+                </Button>
+              }
+            />
           )}
-          {!solo.isLoading && !solo.isError && filteredSolo.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredSolo.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {filteredSolo.map((athlete) => (
                 <SoloPlayerCard key={athlete.id} athlete={athlete} onInvite={setSelectedAthlete} />
               ))}
             </div>
           )}
-        </div>
-      )}
+        </TabsContent>
 
-      {activeTab === "pickup" && <PickupMatchesTab />}
+        <TabsContent value="pickup">
+          <PickupMatchesTab sportFilter={sportFilter} />
+        </TabsContent>
+      </Tabs>
 
       <AthleteResumeDrawer athlete={selectedAthlete} onClose={() => setSelectedAthlete(null)} />
-      <PostAvailabilityModal open={postOpen} onClose={() => setPostOpen(false)} />
+      <PostAvailabilityModal
+        open={postOpen}
+        onClose={() => setPostOpen(false)}
+        onPosted={() => {
+          setPostOpen(false);
+          setSportFilter(null);
+          setActiveTab("solo");
+        }}
+      />
     </main>
+  );
+}
+
+function Count({ value }: { value: number }) {
+  return (
+    <span className="rounded-full bg-text-primary/10 px-1.5 text-[11px] tabular-nums">
+      {value}
+    </span>
   );
 }

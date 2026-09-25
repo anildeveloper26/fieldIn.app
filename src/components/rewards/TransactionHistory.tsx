@@ -1,66 +1,97 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { Spinner } from "@/components/shared/Spinner";
+import { CoinIcon, GiftIcon, LocationPinIcon, RecycleIcon, StarIcon } from "@/components/shared/icons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useWallet } from "@/hooks/useRewards";
+import { cn } from "@/lib/utils";
+import type { CoinTransaction } from "@/types";
 
-const SOURCE_LABEL: Record<string, string> = {
-  rvm: "RVM Redemption",
-  booking: "Venue Booking",
-  voucher: "Voucher Redeemed",
-  bonus: "Bonus",
+const SOURCE: Record<CoinTransaction["source"], { label: string; icon: typeof CoinIcon }> = {
+  rvm: { label: "RVM recycling code", icon: RecycleIcon },
+  booking: { label: "Venue booking", icon: LocationPinIcon },
+  voucher: { label: "Voucher redeemed", icon: GiftIcon },
+  bonus: { label: "Welcome bonus", icon: StarIcon },
 };
+
+const FILTERS = ["all", "earned", "spent"] as const;
 
 export function TransactionHistory() {
   const { data, isLoading, isError, refetch } = useWallet();
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-10">
-        <Spinner />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return <ErrorState message="Could not load transaction history." onRetry={() => refetch()} />;
-  }
+  const transactions = useMemo(
+    () => (data?.transactions ?? []).filter((t) => filter === "all" || t.type === filter),
+    [data, filter]
+  );
 
   return (
-    <div>
-      <h3 className="mb-3 text-sm font-semibold text-text-primary">Transaction History</h3>
-      {data && data.transactions.length === 0 && (
-        <p className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-text-primary/60">
-          No coin activity yet. Redeem an RVM code to get started.
-        </p>
-      )}
-      {data && data.transactions.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-border bg-card">
-          {data.transactions.map((txn, i) => (
-            <div
-              key={txn.id}
-              className={`flex items-center justify-between px-4 py-3 text-sm ${
-                i > 0 ? "border-t border-border" : ""
-              }`}
+    <section>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-text-primary/50">Activity</p>
+          <h2 className="text-xl font-extrabold">Coin history</h2>
+        </div>
+        <div className="flex rounded-2xl border border-border bg-card p-1">
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "rounded-xl px-3 py-1.5 text-xs font-semibold capitalize transition-colors",
+                filter === f ? "bg-emerald text-background" : "text-text-primary/60"
+              )}
             >
-              <div>
-                <p className="text-text-primary">{SOURCE_LABEL[txn.source] ?? txn.source}</p>
-                <p className="text-xs text-text-primary/50">
-                  {new Date(txn.createdAt).toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </p>
-              </div>
-              <span className={`font-semibold ${txn.type === "earned" ? "text-emerald" : "text-red-400"}`}>
-                {txn.type === "earned" ? "+" : "-"}
-                {txn.amount}
-              </span>
-            </div>
+              {f}
+            </button>
           ))}
         </div>
+      </div>
+
+      {isLoading && <Skeleton className="h-64" />}
+      {isError && <ErrorState message="Could not load transaction history." onRetry={() => refetch()} />}
+      {!isLoading && !isError && transactions.length === 0 && (
+        <EmptyState icon={<CoinIcon className="h-6 w-6" />} title="No coin activity here yet" hint="Redeem an RVM code to get started." />
       )}
-    </div>
+
+      {transactions.length > 0 && (
+        <ol className="overflow-hidden rounded-2xl border border-border bg-card">
+          {transactions.map((txn) => {
+            const { label, icon: Icon } = SOURCE[txn.source] ?? SOURCE.bonus;
+            const earned = txn.type === "earned";
+            return (
+              <li key={txn.id} className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0">
+                <span
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+                    earned ? "bg-emerald/15 text-emerald" : "bg-text-primary/5 text-text-primary/60"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{label}</p>
+                  <p className="text-xs text-text-primary/50">
+                    {new Date(txn.createdAt).toLocaleString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}{" "}
+                    · {earned ? "Earned" : "Spent"} · {txn.source.toUpperCase()}
+                  </p>
+                </div>
+                <span className={cn("text-base font-extrabold tabular-nums", earned ? "text-emerald" : "text-text-primary/70")}>
+                  {earned ? "+" : "−"}
+                  {txn.amount}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
   );
 }

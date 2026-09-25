@@ -90,6 +90,7 @@ export interface SoloAvailability {
   id: string;
   userId: string;
   userName: string;
+  sportPreferences: string[];
   trustScore: number;
   punctualityRate: number;
   sportType: string;
