@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+// Same-origin by default: next.config.js proxies /api/* to the backend.
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 const TOKEN_STORAGE_KEY = "fieldin-token";
 const REFRESH_TOKEN_STORAGE_KEY = "fieldin-refresh-token";
 
