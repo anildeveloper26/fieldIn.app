@@ -29,7 +29,7 @@ export function VenueFilters({ filters, onChange }: VenueFiltersProps) {
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
-    <aside className="space-y-6 rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-24">
+    <aside className="min-w-0 space-y-6 rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-24">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-2 text-sm font-bold">
           <SlidersIcon className="h-4 w-4 text-emerald" /> Filters

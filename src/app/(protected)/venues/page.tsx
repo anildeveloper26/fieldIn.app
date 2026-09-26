@@ -54,7 +54,7 @@ export default function VenuesPage() {
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <VenueFilters filters={filters} onChange={setFilters} />
 
-        <section aria-live="polite">
+        <section aria-live="polite" className="min-w-0">
           {isLoading && (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }, (_, i) => (

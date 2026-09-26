@@ -47,7 +47,7 @@ export function WalletCard() {
           <p className="text-[11px] text-text-primary/50">Lifetime earned</p>
         </div>
         <div className="rounded-2xl bg-background p-3">
-          <p className="text-lg font-extrabold tabular-nums">−{spent}</p>
+          <p className="text-lg font-extrabold tabular-nums">{spent > 0 ? `−${spent}` : 0}</p>
           <p className="text-[11px] text-text-primary/50">Spent on rewards</p>
         </div>
       </div>
